@@ -1,0 +1,12 @@
+[redis]
+host=localhost
+port=6379
+
+[smtp]
+# set this to false to disable email notifications
+enabled = false
+server = smtp.gmail.com:587
+from = backup@example.com
+to = me@example.com
+user = username
+password = password
