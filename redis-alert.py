@@ -7,6 +7,7 @@ from logging.handlers import SysLogHandler
 import smtplib
 import redis
 from email.mime.text import MIMEText
+import pprint
 
 __author__ = 'ldalamagas'
 
@@ -50,7 +51,8 @@ def read_config(configuration_file):
 def send_mail(message):
     smtp = None
     try:
-        msg = MIMEText(message)
+        # msg = MIMEText(message)
+        msg = MIMEText(message, 'html')
         msg['Subject'] = 'Redis Memory Threshold exceeded on [%s]' % config["redis_host"]
         msg['From'] = config["smtp_from_address"]
         msg['Reply-To'] = config["smtp_from_address"]
@@ -78,9 +80,25 @@ if __name__ == '__main__':
     used_memory_in_mb = used_memory/1024.0/1024.0   # In MBytes
 
     if used_memory_in_mb > config["redis_threshold"]:
+        full_info = r.info()
+        html = """
+        <html>
+          <head></head>
+          <body>
+            <h1>Warning</h1>
+            <p>
+                Redis server memory consumption has reached to
+                <strong>[%.2f]MB</strong>, the configured threshold is <strong>[%.2f]MB</strong>
+            </p>
+            <h3>Redis Info</h3>
+            <pre>%s</pre>
+          </body>
+        </html>
+        """ % (used_memory_in_mb, config["redis_threshold"], pprint.pformat(full_info))
         message = "Redis server memory consumption has reached to " \
                   "[%.2f]MB, the configured threshold is [%.2f]MB" % (used_memory_in_mb, config["redis_threshold"])
         logger.error(message)
 
         if config["smtp_enabled"]:
-            send_mail(message)
+            # send_mail(message)
+            send_mail(html)
