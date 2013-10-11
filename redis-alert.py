@@ -51,7 +51,6 @@ def read_config(configuration_file):
 def send_mail(message):
     smtp = None
     try:
-        # msg = MIMEText(message)
         msg = MIMEText(message, 'html')
         msg['Subject'] = 'Redis Memory Threshold exceeded on [%s]' % config["redis_host"]
         msg['From'] = config["smtp_from_address"]
@@ -100,5 +99,4 @@ if __name__ == '__main__':
         logger.error(message)
 
         if config["smtp_enabled"]:
-            # send_mail(message)
             send_mail(html)
