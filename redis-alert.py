@@ -26,7 +26,7 @@ logger.addHandler(stream_handler)
 
 def arguments():
     parser = argparse.ArgumentParser(description="Redis Alert")
-    parser.add_argument("--config", default="redis-alert.cfg", help="Path to the configuration file")
+    parser.add_argument("-c", "--config", default="redis-alert.cfg", help="Path to the configuration file")
     return parser.parse_args()
 
 
@@ -48,11 +48,11 @@ def read_config(configuration_file):
     config["smtp_password"] = cp.get("smtp", "password")
 
 
-def send_mail(message):
+def send_mail(subject, message):
     smtp = None
     try:
         msg = MIMEText(message, 'html')
-        msg['Subject'] = 'Redis Memory Threshold exceeded on [%s]' % config["redis_host"]
+        msg['Subject'] = subject
         msg['From'] = config["smtp_from_address"]
         msg['Reply-To'] = config["smtp_from_address"]
         msg['To'] = ",".join(config["smtp_to_addresses"])
@@ -71,32 +71,49 @@ def send_mail(message):
 
 if __name__ == '__main__':
     arguments = arguments()
-    read_config(arguments.config)
+
+    try:
+        read_config(arguments.config)
+    except ConfigParser.Error as error:
+        logger.error("Error while reading configuration: %s", error.message)
+        exit(1)
+    except IOError as error:
+        logger.error("Error while reading configuration: %s", error.strerror)
+        exit(1)
+
     r = redis.Redis(host=config["redis_host"], port=config["redis_port"])
     um = 0
+    used_memory = 0
+    try:
+        used_memory = r.info()['used_memory']           # In Bytes
+    except redis.RedisError as error:
+        message = "Error while communicating with redis: %s" % error.message
+        logger.error(message)
+        send_mail("Redis Alert Error", message)
+        exit(1)
 
-    used_memory = r.info()['used_memory']           # In Bytes
     used_memory_in_mb = used_memory/1024.0/1024.0   # In MBytes
 
     if used_memory_in_mb > config["redis_threshold"]:
-        full_info = r.info()
-        html = """
-        <html>
-          <head></head>
-          <body>
-            <h1>Warning</h1>
-            <p>
-                Redis server memory consumption has reached to
-                <strong>[%.2f]MB</strong>, the configured threshold is <strong>[%.2f]MB</strong>
-            </p>
-            <h3>Redis Info</h3>
-            <pre>%s</pre>
-          </body>
-        </html>
-        """ % (used_memory_in_mb, config["redis_threshold"], pprint.pformat(full_info))
         message = "Redis server memory consumption has reached to " \
                   "[%.2f]MB, the configured threshold is [%.2f]MB" % (used_memory_in_mb, config["redis_threshold"])
         logger.error(message)
 
         if config["smtp_enabled"]:
-            send_mail(html)
+            subject = "Redis Memory Threshold exceeded on [%s]" % config["redis_host"]
+            full_info = r.info()
+            html = """
+            <html>
+              <head></head>
+              <body>
+                <h1>Warning</h1>
+                <p>
+                    Redis server memory consumption has reached to
+                    <strong>[%.2f]MB</strong>, the configured threshold is <strong>[%.2f]MB</strong>
+                </p>
+                <h3>Redis Info</h3>
+                <pre>%s</pre>
+              </body>
+            </html>
+            """ % (used_memory_in_mb, config["redis_threshold"], pprint.pformat(full_info))
+            send_mail(subject, html)
