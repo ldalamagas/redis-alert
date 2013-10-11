@@ -6,7 +6,6 @@ from logging import StreamHandler
 from logging.handlers import SysLogHandler
 import smtplib
 import redis
-import socket
 from email.mime.text import MIMEText
 
 __author__ = 'ldalamagas'
@@ -50,34 +49,24 @@ def read_config(configuration_file):
 
 def send_mail(message):
     smtp = None
-    msg = MIMEText(message)
-    msg['Subject'] = 'Redis Memory Threshold exceeded on [%s]' % socket.gethostname()
-    msg['From'] = config["smtp_from_address"]
-    msg['Reply-To'] = config["smtp_from_address"]
-    msg['To'] = ",".join(config["smtp_to_addresses"])
+    try:
+        msg = MIMEText(message)
+        msg['Subject'] = 'Redis Memory Threshold exceeded on [%s]' % config["redis_host"]
+        msg['From'] = config["smtp_from_address"]
+        msg['Reply-To'] = config["smtp_from_address"]
+        msg['To'] = ",".join(config["smtp_to_addresses"])
 
-    smtp = smtplib.SMTP(config["smtp_server"])
-    smtp.starttls()
-    smtp.login(config["smtp_user"], config["smtp_password"])
-    smtp.sendmail(config["smtp_from_address"], config["smtp_to_addresses"], msg.as_string())
-    smtp.quit()
-    # try:
-    #     msg = email.MIMEText(message)
-    #     msg['Subject'] = 'Redis Memory Threshold exceeded on [%s]' % socket.gethostname()
-    #     msg['From'] = config["smtp_from_address"]
-    #     msg['Reply-To'] = config["smtp_from_address"]
-    #     msg['To'] = config["smtp_to_address"]
-    #
-    #     smtp = smtplib.SMTP(config["smtp_server"])
-    #     smtp.starttls()
-    #     smtp.login(config["smtp_user"], config["smtp_password"])
-    #     smtp.sendmail(config["smtp_from_address"], config["smtp_to_address"], msg.as_string())
-    # except email.errors.MessageError:
-    #     logger.error("Error trying to notify recipients")
-    # except email.SMTPAuthenticationError:
-    #     logger.error("Error trying to notify recipients, please check your smtp credentials")
-    # finally:
-    #     smtp.quit()
+        smtp = smtplib.SMTP(config["smtp_server"])
+        smtp.starttls()
+        smtp.login(config["smtp_user"], config["smtp_password"])
+        smtp.sendmail(config["smtp_from_address"], config["smtp_to_addresses"], msg.as_string())
+    except email.errors.MessageError:
+        logger.error("Error trying to notify recipients")
+    except smtplib.SMTPAuthenticationError:
+        logger.error("Error trying to notify recipients, please check your smtp credentials")
+    finally:
+        if smtp:
+            smtp.quit()
 
 if __name__ == '__main__':
     arguments = arguments()
@@ -85,10 +74,13 @@ if __name__ == '__main__':
     r = redis.Redis(host=config["redis_host"], port=config["redis_port"])
     um = 0
 
-    used_memory = r.info()['used_memory']   # In Bytes
-    used_memory_in_mb = used_memory/1024.0/1024.0
+    used_memory = r.info()['used_memory']           # In Bytes
+    used_memory_in_mb = used_memory/1024.0/1024.0   # In MBytes
+
     if used_memory_in_mb > config["redis_threshold"]:
-        message = "Redis server memory consumpsion has reached to " \
+        message = "Redis server memory consumption has reached to " \
                   "[%.2f]MB, the configured threshold is [%.2f]MB" % (used_memory_in_mb, config["redis_threshold"])
         logger.error(message)
-        send_mail(message)
+
+        if config["smtp_enabled"]:
+            send_mail(message)
