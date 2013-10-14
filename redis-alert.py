@@ -20,10 +20,10 @@ logger = logging.getLogger("backup")
 logger.setLevel(logging.INFO)
 formatter = logging.Formatter("REDIS-ALERT[%(process)d] %(levelname)s: %(message)s")
 syslog_handler = SysLogHandler(address="/dev/log")
-stream_handler = StreamHandler()
+# stream_handler = StreamHandler()
 syslog_handler.setFormatter(fmt=formatter)
 logger.addHandler(syslog_handler)
-logger.addHandler(stream_handler)
+# logger.addHandler(stream_handler)
 
 
 def arguments():
